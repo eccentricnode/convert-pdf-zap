@@ -1,15 +1,20 @@
 import sys
 import time
+import logging
 from pathlib import Path
 
 from docling.document_converter import DocumentConverter
-from docling_core.types.doc import ImageRefMode, PictureItem
+from docling_core.types.doc import ImageRefMode
 
 from docling.datamodel.base_models import InputFormat
 from docling.datamodel.pipeline_options import PdfPipelineOptions
 from docling.document_converter import DocumentConverter, PdfFormatOption
 
-IMAGE_RESOLUTION_SCALE = 2.0
+IMAGE_RESOLUTION_SCALE = 0.5
+
+output_dir = Path("scratch")
+
+_log = logging.getLogger(__name__)
 
 def main():
     pipeline_options = PdfPipelineOptions()
@@ -29,17 +34,20 @@ def main():
 
     else: 
         submittedPDF = sys.argv[1]
+        start_time = time.time()
         print("============ Converting PDF ============")
-
         result = converter.convert(submittedPDF)
 
-        print(result.document.export_to_markdown(image_mode=ImageRefMode.EMBEDDED))
-        print("----------- File Converted to Markdown! --------------")
         file = result.document.export_to_markdown(image_mode=ImageRefMode.EMBEDDED)
-        with open("text.md", "w") as f:
-            f.write(file)
-        print(f"Look at file: text.md")
 
+        _log.info("----------- File Converted to Markdown! --------------")
+        
+        with open("text.md", "w") as f:
+            _log.info("Writing markdown file to text.md")
+            f.write(file)
+        _log.info(f"Look at file: text.md")
+        end_time = time.time()
+        _log.info(f"Time taken: {end_time - start_time} seconds")
 
 
 def validpdf(submittedFile):
