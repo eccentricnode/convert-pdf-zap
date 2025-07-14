@@ -11,11 +11,21 @@ import json
 import argparse
 from pathlib import Path
 
+# Load environment variables
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    print("Warning: python-dotenv not installed. Environment variables must be set manually.")
+
 try:
     import fitz  # PyMuPDF
 except ImportError:
     print("Error: PyMuPDF not installed. Run: pip install pymupdf")
     sys.exit(1)
+
+# Import image utilities
+from image_utils import compress_image_with_fitz
 
 
 def extract_first_page(pdf_path, include_images=True):
@@ -66,11 +76,17 @@ def extract_first_page(pdf_path, include_images=True):
                         
                         # Skip very small images (likely icons/artifacts)
                         if len(img_bytes) > 1000:  # Minimum 1KB
+                            # Compress image to 150x150 max using PyMuPDF
+                            compressed_bytes = compress_image_with_fitz(img_bytes)
+                            compressed_b64 = base64.b64encode(compressed_bytes).decode()
+                            
                             image_data.append({
-                                "data": base64.b64encode(img_bytes).decode(),
-                                "format": img_ext,
+                                "data": compressed_b64,
+                                "format": "jpeg",  # Always JPEG after compression
                                 "index": img_index + 1,
-                                "size_bytes": len(img_bytes)
+                                "size_bytes": len(compressed_bytes),
+                                "original_size_bytes": len(img_bytes),
+                                "original_format": img_ext
                             })
                     except Exception as e:
                         print(f"Warning: Could not extract image {img_index + 1}: {e}")
@@ -124,6 +140,10 @@ def format_for_ai(result, format_type="markdown"):
             output.append("")
             output.append(f"- **Format**: {img['format'].upper()}")
             output.append(f"- **Size**: {img['size_bytes']:,} bytes")
+            if 'original_size_bytes' in img:
+                compression_ratio = (1 - img['size_bytes'] / img['original_size_bytes']) * 100
+                output.append(f"- **Original Size**: {img['original_size_bytes']:,} bytes ({compression_ratio:.1f}% compressed)")
+                output.append(f"- **Original Format**: {img.get('original_format', 'unknown').upper()}")
             output.append(f"- **Base64 length**: {len(img['data']):,} characters")
             output.append("")
             
@@ -137,13 +157,14 @@ def format_for_ai(result, format_type="markdown"):
     return "\n".join(output)
 
 
-def process_with_ai(content, ai_provider="none"):
+def process_with_ai(content, ai_provider="none", custom_prompt=None):
     """
-    Process extracted content with AI.
+    Process extracted content with OpenRouter AI.
     
     Args:
         content: Extracted content (markdown or json)
-        ai_provider: AI service to use ("openai", "anthropic", "local", "none")
+        ai_provider: AI service to use ("openrouter", "backup", "none")
+        custom_prompt: Optional custom prompt to use
     
     Returns:
         str: AI-processed response or original content if no AI
@@ -151,30 +172,25 @@ def process_with_ai(content, ai_provider="none"):
     if ai_provider == "none":
         return content
     
-    # Placeholder for AI integration
-    # You can add your preferred AI service here
-    
-    if ai_provider == "openai":
-        # TODO: Add OpenAI integration
-        # import openai
-        # response = openai.chat.completions.create(...)
-        print("🤖 OpenAI integration coming soon...")
+    # Import and initialize AI processor
+    try:
+        from ai_processor import create_ai_processor
+        processor = create_ai_processor()
+        
+        if not processor or not processor.is_available():
+            return content
+        
+        # Process based on provider type
+        if ai_provider == "backup":
+            return processor.process_content(content, use_backup=True, custom_prompt=custom_prompt)
+        else:  # "openrouter" or default
+            return processor.process_with_fallback(content, custom_prompt=custom_prompt)
+            
+    except ImportError as e:
+        print(f"❌ Error importing AI processor: {e}")
         return content
-    
-    elif ai_provider == "anthropic":
-        # TODO: Add Anthropic integration
-        # import anthropic
-        # response = anthropic.messages.create(...)
-        print("🤖 Anthropic integration coming soon...")
-        return content
-    
-    elif ai_provider == "local":
-        # TODO: Add local model integration (ollama, etc.)
-        print("🤖 Local AI integration coming soon...")
-        return content
-    
-    else:
-        print(f"Unknown AI provider: {ai_provider}")
+    except Exception as e:
+        print(f"❌ AI processing failed: {e}")
         return content
 
 
@@ -185,12 +201,14 @@ def create_parser():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python main.py document.pdf                     # Extract to markdown
-  python main.py document.pdf --json              # Extract to JSON
-  python main.py document.pdf --no-images         # Text only
-  python main.py document.pdf --save              # Save to file
-  python main.py document.pdf --ai openai         # Process with OpenAI
-  python main.py document.pdf --output result.md  # Custom output file
+  python main.py document.pdf                        # Extract to markdown
+  python main.py document.pdf --json                 # Extract to JSON
+  python main.py document.pdf --no-images            # Text only
+  python main.py document.pdf --save                 # Save to file
+  python main.py document.pdf --ai openrouter        # Process with AI (main model)
+  python main.py document.pdf --ai backup            # Process with AI (backup model)
+  python main.py document.pdf --ai openrouter --ai-prompt "Summarize this document"
+  python main.py document.pdf --output result.md     # Custom output file
         """
     )
     
@@ -207,68 +225,22 @@ Examples:
                        help='Save to default filename (pdf_name.md or .json)')
     
     # AI options
-    parser.add_argument('--ai', choices=['openai', 'anthropic', 'local'],
-                       help='Process with AI service')
+    parser.add_argument('--ai', choices=['openrouter', 'backup', 'none'], 
+                       default='none',
+                       help='AI processing: openrouter (main model), backup (fallback model), or none')
     parser.add_argument('--ai-prompt',
                        help='Custom prompt for AI processing')
     
     # Utility
-    parser.add_argument('--demo', action='store_true',
-                       help='Show demo output')
     parser.add_argument('--verbose', '-v', action='store_true',
                        help='Verbose output')
     
     return parser
 
-
-def show_demo():
-    """Show a demo of the extraction capabilities."""
-    print("=== PDF AI Processing Tool Demo ===")
-    print()
-    print("This tool extracts content from the first page of PDFs for AI processing.")
-    print()
-    
-    sample_result = {
-        "text": "Document Header\nImportant content for AI analysis...",
-        "images": [
-            {
-                "data": "base64_encoded_image_data...",
-                "format": "jpeg",
-                "index": 1,
-                "size_bytes": 15420
-            }
-        ],
-        "image_count": 1,
-        "filename": "sample.pdf"
-    }
-    
-    print("Example Markdown output:")
-    print("```markdown")
-    print(format_for_ai(sample_result, "markdown"))
-    print("```")
-    print()
-    print("Usage examples:")
-    print("  python main.py document.pdf                    # Basic extraction")
-    print("  python main.py document.pdf --save             # Save to file")
-    print("  python main.py document.pdf --ai openai        # Process with AI")
-    print("  python main.py document.pdf --json --save      # JSON output")
-
-
 def main():
     """Main entry point."""
     parser = create_parser()
-    
-    # Handle demo mode first (before requiring PDF file)
-    if len(sys.argv) > 1 and '--demo' in sys.argv:
-        show_demo()
-        return
-    
     args = parser.parse_args()
-    
-    # Handle demo mode
-    if args.demo:
-        show_demo()
-        return
     
     # Validate PDF file
     if not os.path.exists(args.pdf_file):
@@ -291,10 +263,11 @@ def main():
         content = format_for_ai(result, format_type)
         
         # Process with AI if requested
-        if args.ai:
+        if args.ai and args.ai != 'none':
             if args.verbose:
-                print(f"🤖 Processing with {args.ai}...")
-            content = process_with_ai(content, args.ai)
+                model_type = "backup model" if args.ai == "backup" else "main model"
+                print(f"🤖 Processing with OpenRouter ({model_type})...")
+            content = process_with_ai(content, args.ai, args.ai_prompt)
         
         # Determine output file
         output_file = None
