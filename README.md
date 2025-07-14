@@ -4,13 +4,13 @@ A minimal, fast PDF extractor that gets just the first page text and optionally 
 
 ## Features
 
-- ✅ Extract text from first page only (fast!)
-- ✅ Extract ALL images from first page as base64 (not just the first one!)
-- ✅ Simple command-line interface
-- ✅ JSON output option for programmatic use
-- ✅ Only ~100 lines of code
-- ✅ Single dependency (PyMuPDF)
-- ✅ Filters out tiny images (likely icons/artifacts)
+- Extract text from first page only (fast!)
+- Extract ALL images from first page as base64 (not just the first one!)
+- Simple command-line interface
+- JSON output option for programmatic use
+- Only ~100 lines of code
+- Single dependency (PyMuPDF)
+- Filters out tiny images (likely icons/artifacts)
 
 ## Installation
 
