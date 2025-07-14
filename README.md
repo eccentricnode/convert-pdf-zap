@@ -15,7 +15,7 @@ A minimal, fast PDF extractor that gets just the first page text and optionally 
 ## Installation
 
 ```bash
-pip install -r requirements_simple.txt
+pip install -r requirements.txt
 ```
 
 ## Usage
@@ -23,13 +23,13 @@ pip install -r requirements_simple.txt
 ### Basic Usage
 ```bash
 # Extract text and image from first page
-python simple_extract.py document.pdf
+python main.py document.pdf
 
 # Extract only text (faster)
-python simple_extract.py document.pdf --no-image
+python main.py document.pdf --no-image
 
 # Get JSON output for programmatic use
-python simple_extract.py document.pdf --json
+python main.py document.pdf --json
 ```
 
 ### Example Output
