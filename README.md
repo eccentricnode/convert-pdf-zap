@@ -88,18 +88,6 @@ data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD...
   "filename": "document.pdf"
 }
 ```
-
-## Why Use This Instead of the Full Converter?
-
-| Feature | Simple Extractor | Full Converter |
-|---------|------------------|----------------|
-| Speed | ⚡ Very Fast | 🐌 Slow |
-| Code Size | 80 lines | 1000+ lines |
-| Memory Usage | Low | High |
-| Dependencies | 1 | 3+ |
-| First Page Only | ✅ Perfect | ❌ Overkill |
-| AI-Ready Output | ✅ Yes | ❌ Complex |
-
 ## For AI Processing
 
 This tool is designed specifically for AI workflows where you need:
