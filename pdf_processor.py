@@ -8,7 +8,6 @@ import sys
 import base64
 import os
 import json
-import argparse
 from pathlib import Path
 
 # Load environment variables
@@ -24,8 +23,9 @@ except ImportError:
     print("Error: PyMuPDF not installed. Run: pip install pymupdf")
     sys.exit(1)
 
-# Import image utilities
+# Import utilities
 from image_utils import compress_image_with_fitz
+from cli_handler import create_cli_handler
 
 
 def extract_first_page(pdf_path, include_images=True):
@@ -194,106 +194,129 @@ def process_with_ai(content, ai_provider="none", custom_prompt=None):
         return content
 
 
-def create_parser():
-    """Create command line argument parser."""
-    parser = argparse.ArgumentParser(
-        description="Extract PDF content and optionally process with AI",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  python main.py document.pdf                        # Extract to markdown
-  python main.py document.pdf --json                 # Extract to JSON
-  python main.py document.pdf --no-images            # Text only
-  python main.py document.pdf --save                 # Save to file
-  python main.py document.pdf --ai openrouter        # Process with AI (main model)
-  python main.py document.pdf --ai backup            # Process with AI (backup model)
-  python main.py document.pdf --ai openrouter --ai-prompt "Summarize this document"
-  python main.py document.pdf --output result.md     # Custom output file
-        """
-    )
+def process_pdf_document(pdf_path, options=None):
+    """
+    Core PDF processing function without CLI dependencies.
     
-    parser.add_argument('pdf_file', help='PDF file to process')
+    Args:
+        pdf_path: Path to PDF file
+        options: dict with processing options
+            - include_images: bool (default True)
+            - format_type: str "markdown" or "json" (default "markdown")
+            - ai_provider: str "openrouter", "backup", or "none" (default "none")
+            - custom_prompt: str (optional)
     
-    # Output options
-    parser.add_argument('--json', action='store_true',
-                       help='Output as JSON instead of Markdown')
-    parser.add_argument('--no-images', action='store_true',
-                       help='Skip image extraction (text only)')
-    parser.add_argument('--output', '-o',
-                       help='Output file path')
-    parser.add_argument('--save', action='store_true',
-                       help='Save to default filename (pdf_name.md or .json)')
-    
-    # AI options
-    parser.add_argument('--ai', choices=['openrouter', 'backup', 'none'], 
-                       default='none',
-                       help='AI processing: openrouter (main model), backup (fallback model), or none')
-    parser.add_argument('--ai-prompt',
-                       help='Custom prompt for AI processing')
-    
-    # Utility
-    parser.add_argument('--verbose', '-v', action='store_true',
-                       help='Verbose output')
-    
-    return parser
-
-def main():
-    """Main entry point."""
-    parser = create_parser()
-    args = parser.parse_args()
-    
-    # Validate PDF file
-    if not os.path.exists(args.pdf_file):
-        print(f"❌ Error: File not found: {args.pdf_file}")
-        sys.exit(1)
-    
-    if args.verbose:
-        print(f"📄 Processing: {args.pdf_file}")
+    Returns:
+        dict: {
+            "success": bool,
+            "result": dict,           # Raw extraction result
+            "formatted_content": str, # Formatted content
+            "final_content": str,     # Final content (after AI if applicable)
+            "metadata": dict,         # Processing metadata
+            "error": str              # Error message if success=False
+        }
+    """
+    options = options or {}
     
     try:
         # Extract content from PDF
-        result = extract_first_page(args.pdf_file, include_images=not args.no_images)
-        
-        if args.verbose:
-            print(f"✅ Extracted {len(result['text'])} characters of text")
-            print(f"✅ Found {result['image_count']} images")
+        result = extract_first_page(
+            pdf_path, 
+            include_images=options.get('include_images', True)
+        )
         
         # Format content
-        format_type = "json" if args.json else "markdown"
-        content = format_for_ai(result, format_type)
+        format_type = options.get('format_type', 'markdown')
+        formatted_content = format_for_ai(result, format_type)
         
         # Process with AI if requested
-        if args.ai and args.ai != 'none':
-            if args.verbose:
-                model_type = "backup model" if args.ai == "backup" else "main model"
-                print(f"🤖 Processing with OpenRouter ({model_type})...")
-            content = process_with_ai(content, args.ai, args.ai_prompt)
+        ai_provider = options.get('ai_provider', 'none')
+        final_content = formatted_content
         
-        # Determine output file
-        output_file = None
-        if args.output:
-            output_file = args.output
-        elif args.save:
-            pdf_name = os.path.splitext(os.path.basename(args.pdf_file))[0]
-            extension = "json" if args.json else "md"
-            output_file = f"{pdf_name}_extracted.{extension}"
+        if ai_provider and ai_provider != 'none':
+            final_content = process_with_ai(
+                formatted_content, 
+                ai_provider, 
+                options.get('custom_prompt')
+            )
         
-        # Save or print output
-        if output_file:
-            with open(output_file, 'w', encoding='utf-8') as f:
-                f.write(content)
-            print(f"✅ Content saved to: {output_file}")
-            if not args.ai:  # Don't show stats if AI processed
-                print(f"📊 Found {result['image_count']} images from first page")
-        else:
-            print(content)
+        return {
+            "success": True,
+            "result": result,
+            "formatted_content": formatted_content,
+            "final_content": final_content,
+            "metadata": {
+                "file_name": result["filename"],
+                "text_length": len(result["text"]),
+                "image_count": result["image_count"],
+                "ai_processed": ai_provider != 'none',
+                "format_type": format_type
+            },
+            "error": None
+        }
         
     except Exception as e:
-        print(f"❌ Error: {e}")
-        if args.verbose:
-            import traceback
-            traceback.print_exc()
+        return {
+            "success": False,
+            "result": None,
+            "formatted_content": None,
+            "final_content": None,
+            "metadata": {"file_name": os.path.basename(pdf_path) if pdf_path else "unknown"},
+            "error": str(e)
+        }
+
+
+def main():
+    """Main CLI entry point."""
+    # Create CLI handler (combines argument parsing + output formatting)
+    cli = create_cli_handler()
+    
+    # You can add custom arguments here if needed:
+    # cli.add_argument('--custom-flag', action='store_true', help='Custom flag')
+    
+    # Parse arguments
+    args = cli.parse_args()
+    
+    # Validate PDF file
+    cli.validate_file(args.pdf_file)
+    
+    # Start processing
+    cli.print_processing_start(args.pdf_file)
+    
+    # Prepare processing options
+    options = {
+        'include_images': not args.no_images,
+        'format_type': 'json' if args.json else 'markdown',
+        'ai_provider': args.ai,
+        'custom_prompt': args.ai_prompt
+    }
+    
+    # Process the PDF
+    processing_result = process_pdf_document(args.pdf_file, options)
+    
+    if not processing_result["success"]:
+        cli.print_error(processing_result["error"])
         sys.exit(1)
+    
+    # Print extraction stats
+    cli.print_extraction_stats(processing_result["result"])
+    
+    # Print AI processing message
+    if args.ai and args.ai != 'none':
+        cli.print_ai_processing(args.ai)
+    
+    # Handle output
+    output_file = cli.get_output_file(args)
+    
+    if output_file:
+        cli.save_to_file(
+            processing_result["final_content"],
+            output_file, 
+            processing_result["result"], 
+            processing_result["metadata"]["ai_processed"]
+        )
+    else:
+        cli.print_content(processing_result["final_content"])
 
 
 if __name__ == "__main__":
