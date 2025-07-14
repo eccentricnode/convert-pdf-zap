@@ -4,18 +4,18 @@ A minimal, fast PDF extractor that gets just the first page text and optionally 
 
 ## Features
 
-- ✅ Extract text from first page only (fast!)
-- ✅ Extract ALL images from first page as base64 (not just the first one!)
-- ✅ Simple command-line interface
-- ✅ JSON output option for programmatic use
-- ✅ Only ~100 lines of code
-- ✅ Single dependency (PyMuPDF)
-- ✅ Filters out tiny images (likely icons/artifacts)
+- Extract text from first page only (fast!)
+- Extract ALL images from first page as base64 (not just the first one!)
+- Simple command-line interface
+- JSON output option for programmatic use
+- Only ~100 lines of code
+- Single dependency (PyMuPDF)
+- Filters out tiny images (likely icons/artifacts)
 
 ## Installation
 
 ```bash
-pip install -r requirements_simple.txt
+pip install -r requirements.txt
 ```
 
 ## Usage
@@ -23,13 +23,13 @@ pip install -r requirements_simple.txt
 ### Basic Usage
 ```bash
 # Extract text and image from first page
-python simple_extract.py document.pdf
+python main.py document.pdf
 
 # Extract only text (faster)
-python simple_extract.py document.pdf --no-image
+python main.py document.pdf --no-image
 
 # Get JSON output for programmatic use
-python simple_extract.py document.pdf --json
+python main.py document.pdf --json
 ```
 
 ### Example Output
@@ -88,18 +88,6 @@ data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD...
   "filename": "document.pdf"
 }
 ```
-
-## Why Use This Instead of the Full Converter?
-
-| Feature | Simple Extractor | Full Converter |
-|---------|------------------|----------------|
-| Speed | ⚡ Very Fast | 🐌 Slow |
-| Code Size | 80 lines | 1000+ lines |
-| Memory Usage | Low | High |
-| Dependencies | 1 | 3+ |
-| First Page Only | ✅ Perfect | ❌ Overkill |
-| AI-Ready Output | ✅ Yes | ❌ Complex |
-
 ## For AI Processing
 
 This tool is designed specifically for AI workflows where you need:
